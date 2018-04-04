@@ -1,80 +1,11 @@
 require(["gitbook"], function(gitbook) {
 
     var LANGUAGES = {
-        "javascript": {
-            id: "javascript",
-            assertCode: "function assert(condition, message) { \nif (!condition) { \n throw message || \"Assertion failed\"; \n } \n }\n",
-            REPL: JSREPL,
-            sep: ";\n",
-        },
         "solidity": {
             id: "solidity",
         }
     };
 
-    var evalJS = function(lang, code, callback) {
-        var ready = false;
-        var finished = false;
-
-        var finish = function() {
-            if(finished) {
-                return console.error('Already finished');
-            }
-            finished = true;
-            return callback.apply(null, arguments);
-        };
-
-        var repl;
-
-        // Handles all our events
-        var eventHandler = function(data, eventType) {
-            switch(eventType) {
-                case 'progress':
-                    // Update UI loading bar
-                    break;
-                case 'timeout':
-                    finish(new Error(data));
-                    break;
-                case 'result':
-                    finish(null, {
-                        value: data,
-                        type: 'result'
-                    });
-                    break;
-                case 'error':
-                    if(ready) {
-                        return finish(null, {
-                            value: data,
-                            type: 'error'
-                        });
-                    }
-                    return finish(new Error(data));
-                    break
-                case 'ready':
-                    // We're good to get results and stuff back now
-                    ready = true;
-                    // Eval our code now that the runtime is ready
-                    repl.eval(code);
-                    break;
-                default:
-                    console.log('Unhandled event =', eventType, 'data =', data);
-            }
-        };
-
-        repl = new lang.REPL({
-            input: eventHandler,
-            output: eventHandler,
-            result: eventHandler,
-            error: eventHandler,
-            progress: eventHandler,
-            timeout: {
-                time: 30000,
-                callback: eventHandler
-            }
-        });
-
-        repl.loadLanguage(lang.id, eventHandler);
-    };
 
     var deploy = function(contracts, name) {
         var dCode;
@@ -151,6 +82,10 @@ require(["gitbook"], function(gitbook) {
                 // Tests
                 var input = assertSol + solution + tValidation;
                 rValidation = compiler.compile(input, optimize);
+               
+                console.log(compiler);
+                console.log(rValidation);
+
                 var regex = new RegExp("__:Assert_+?(?=[a-z0-9])", "g");
                 var dAssert = await deploy(rValidation.contracts, "Assert");
                 rValidation.contracts[":TestSpaceship"].bytecode = rValidation.contracts[":TestSpaceship"].bytecode.replace(regex, dAssert.address.substring(2));
@@ -164,22 +99,6 @@ require(["gitbook"], function(gitbook) {
                     return callback(new Error("Tests failed"));
                 }
            });
-        } else {
-	   // Validate with validation code
-		var code = [
-		    context,
-		    solution,
-		    langd.assertCode,
-		    validation,
-		].join(langd.sep);
-		window.alert(langd);
-
-		evalJS(langd, code, function(err, res) {
-		    if(err) return callback(err);
-
-		    if (res.type == "error") callback(new Error(res.value));
-		    else callback(null, res.value);
-		});
         }
     };
 
