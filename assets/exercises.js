@@ -7,48 +7,65 @@ require(["gitbook"], function(gitbook) {
     };
 
 
+    var estimateGas = function(data) {
+        return new Promise(resolve => {
+            web3.eth.estimateGas({data: data}, (err, r) => {
+                if (err) {console.log(err); return;}
+                resolve(r);
+            })
+        })
+    }
+
     var deploy = function(contracts, name) {
         var dCode;
         var contractName = ":" + name; // TODO should be a regex on solution
         var abi = contracts[contractName].interface;
-        var bc = contracts[contractName].bytecode;
+        var bc = '0x' + contracts[contractName].bytecode;
         web3 = new Web3(web3.currentProvider);
-        var mcontract = web3.eth.contract($.parseJSON(abi));
+        var mcontract = web3.eth.contract(JSON.parse(abi));
         return new Promise(resolve => {
-          mcontract.new({data: bc, from:web3.eth.accounts[0], gas: 6385876}, (err, r) => {
-            if (err) {console.log(err); return}
-            if (!r.address) { return }
-            dCode = r;
-            resolve(dCode);
-           })
+            estimateGas(bc).then(estimate => {
+                mcontract.new({data: bc, from:web3.eth.accounts[0], gas: estimate}, (err, r) => {
+                    if(err) {
+                        console.log(err);
+                        return
+                    }
+                    if(!r.address) {
+                        return
+                    }
+                    dCode = r;
+                    resolve(dCode);
+                });
+            })
         })
     }
 
-    var performTests = function(contract) {
+    var performTests = function(contract, addresses) {
         var result = true;
         var errors = [];
         var resultReceived = 0;
 
         return new Promise(resolve => {
-          var event = contract.TestEvent((err, r) => {
-            resultReceived++;
-            result = result && r.args.result;
-            if (!r.args.result) {
-              errors.push(r.args.message)
-            }
-            // Resolve only after all test results
-            if (resultReceived === contract.abi.length - 1) {
-              resolve({"result": result, "errors": errors })
-            }
-          });
+            var event = contract.TestEvent((err, r) => {
+                resultReceived++;
+                result = result && r.args.result;
+                if (!r.args.result) {
+                    errors.push(r.args.message)
+                }
+                // Resolve only after all test results
+                if (resultReceived === contract.abi.length - 1) {
+                    resolve({"result": result, "errors": errors })
+                }
+            });
 
-          for (var iTest = 0; iTest < contract.abi.length; iTest++) {
-            var test = contract.abi[iTest];
-            if (test.name !== "TestEvent") {
-              contract[test.name]((err, r) => { if (err) { errors.push(err) } } )
+            var iTest;
+            for (iTest = 0; iTest < contract.abi.length; iTest++) {
+                var test = contract.abi[iTest];
+                if (test.type === "function") {
+                    contract[test.name](addresses, (err, r) => { if (err) { errors.push(err) } } )
+                }
             }
-          }
-          
+
         })
 
     }
@@ -62,43 +79,38 @@ require(["gitbook"], function(gitbook) {
         // Check language is supported
         if (!langd) return callback(new Error("Language '"+lang+"' not available for execution"));
         if (langd.id === "solidity") {
-            BrowserSolc.loadVersion("soljson-v0.4.19+commit.c4cbbb05.js", async function(compiler) {
+            BrowserSolc.loadVersion("soljson-v0.4.21+commit.dfe3193c.js", async function(compiler) {
                 optimize = 1;
                 rCode = compiler.compile(solution, optimize);
                 // If code does not compile properly
                 if (rCode.errors) {
-                  return callback(new Error(rCode.errors[0]));
+                    return callback(new Error(rCode.errors[0]));
                 }
 
+                var addresses = []
+
+                // Deploy all contracts
                 dCode = await deploy(rCode.contracts, "Spaceship");
+                addresses.push(dCode.address);
 
-                // create an instance of the contract
-                var cCode = web3.eth.contract(dCode.abi);
-                // bind it with the deployed contract
-                var cCode = cCode.at(dCode.address);
+                validation = JSON.parse(validation);
 
-                // In validation, we should replace __ADDRESS__ with the address of the deployed contract
-                var tValidation = validation.replace(new RegExp("__ADDRESS__", "g"), dCode.address);
-                // Tests
-                var input = assertSol + solution + tValidation;
-                rValidation = compiler.compile(input, optimize);
-               
-                console.log(compiler);
-                console.log(rValidation);
+                var tests = true;
+                var index;
+                for (index = 0; index < validation.length; index++) {
+                    var test = validation[index];
 
-                var regex = new RegExp("__:Assert_+?(?=[a-z0-9])", "g");
-                var dAssert = await deploy(rValidation.contracts, "Assert");
-                rValidation.contracts[":TestSpaceship"].bytecode = rValidation.contracts[":TestSpaceship"].bytecode.replace(regex, dAssert.address.substring(2));
-                var dValidation = await deploy(rValidation.contracts, "TestSpaceship");
-                var cValidation = web3.eth.contract(dValidation.abi).at(dValidation.address);
+                    var cTest = web3.eth.contract(JSON.parse(test.abi)).at(test.address);
 
-                var tests = await performTests(cValidation);
-                if (tests.result) {
+                    var r = await performTests(cTest, addresses);
+                    tests = tests && r.result;
+                }
+                if (tests) {
                     return callback(null, "Success");
                 } else {
                     return callback(new Error("Tests failed"));
                 }
-           });
+            });
         }
     };
 
@@ -106,7 +118,7 @@ require(["gitbook"], function(gitbook) {
     // Add code editor, bind interractions
     var prepareExercise = function($exercise) {
         var codeSolution = $exercise.find(".code-solution").text();
-        var codeValidation = $exercise.find(".code-validation").text();
+        var codeValidation = $exercise.find(".code-deployed").text();
         var codeContext = $exercise.find(".code-context").text();
 
         var editor = ace.edit($exercise.find(".editor").get(0));
