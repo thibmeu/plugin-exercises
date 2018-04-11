@@ -6,6 +6,24 @@ require(["gitbook"], function(gitbook) {
         }
     };
 
+    var currentCompiler = undefined;
+    var loadCompiler = function() {
+        setLoading('Loading compiler');
+        return new Promise(resolve => {
+            if (currentCompiler === undefined) {
+                BrowserSolc.loadVersion("soljson-v0.4.21+commit.dfe3193c.js", compiler => {
+                    currentCompiler = compiler;
+                    resolve(compiler);
+                })
+            } else {
+                resolve(currentCompiler);
+            }
+        })
+    };
+
+    var setLoading = function(message) {
+        $('#loading-message').text(message);
+    };
 
     var estimateGas = function(data) {
         return new Promise(resolve => {
@@ -14,20 +32,19 @@ require(["gitbook"], function(gitbook) {
                 resolve(r);
             })
         })
-    }
+    };
 
-    var deploy = function(contracts, name) {
+    var deploy = function(contract) {
         var dCode;
-        var contractName = ":" + name; // TODO should be a regex on solution
-        var abi = contracts[contractName].interface;
-        var bc = '0x' + contracts[contractName].bytecode;
-        web3 = new Web3(web3.currentProvider);
+        var abi = contract.interface;
+        var bc = '0x' + contract.bytecode;
         var mcontract = web3.eth.contract(JSON.parse(abi));
-        return new Promise(resolve => {
+        return new Promise((resolve, reject) => {
             estimateGas(bc).then(estimate => {
                 mcontract.new({data: bc, from:web3.eth.accounts[0], gas: estimate}, (err, r) => {
                     if(err) {
                         console.log(err);
+                        reject();
                         return
                     }
                     if(!r.address) {
@@ -38,7 +55,7 @@ require(["gitbook"], function(gitbook) {
                 });
             })
         })
-    }
+    };
 
     var performTests = function(contract, addresses) {
         var result = true;
@@ -48,29 +65,36 @@ require(["gitbook"], function(gitbook) {
         return new Promise(resolve => {
             var event = contract.TestEvent((err, r) => {
                 resultReceived++;
+                setLoading('Test ' + resultReceived + '/' + (contract.abi.length-1));
                 result = result && r.args.result;
                 if (!r.args.result) {
                     errors.push(r.args.message)
                 }
                 // Resolve only after all test results
                 if (resultReceived === contract.abi.length - 1) {
-                    resolve({"result": result, "errors": errors })
+                    resolve({result: result, errors: errors })
                 }
             });
 
             var iTest;
             for (iTest = 0; iTest < contract.abi.length; iTest++) {
+                setLoading('Test ' + 0 + '/' + (contract.abi.length-1));
                 var test = contract.abi[iTest];
                 if (test.type === "function") {
                     contract[test.name](addresses, (err, r) => { if (err) { errors.push(err) } } )
                 }
             }
 
+            // If contract.abi has only TestEvent or nothing
+            if (contract.abi.length <= 1) {
+                resolve({ result: true, errors: [] });
+            }
+
         })
 
-    }
+    };
 
-    var execute = function(lang, solution, validation, context, codeSolution, callback) {
+    var execute = async function(lang, solution, validation, context, codeSolution, callback) {
         // Language data
         var langd =  LANGUAGES[lang];
         var rCode;
@@ -79,38 +103,62 @@ require(["gitbook"], function(gitbook) {
         // Check language is supported
         if (!langd) return callback(new Error("Language '"+lang+"' not available for execution"));
         if (langd.id === "solidity") {
-            BrowserSolc.loadVersion("soljson-v0.4.21+commit.dfe3193c.js", async function(compiler) {
-                optimize = 1;
-                rCode = compiler.compile(solution, optimize);
-                // If code does not compile properly
-                if (rCode.errors) {
-                    return callback(new Error(rCode.errors[0]));
+            compiler = await loadCompiler();
+            optimize = 1;
+
+            setLoading('Compiling your submission');
+            rCode = compiler.compile(solution, optimize);
+            rCodeSolution = compiler.compile(codeSolution, optimize);
+            // If code does not compile properly
+            if (rCode.errors) {
+                return callback(new Error(rCode.errors[0]));
+            } else {
+                var notDefined = Object.keys(rCodeSolution.contracts)
+                    .filter(function(name) {
+                        return rCode.contracts[name] === undefined
+                    }).map(function(name) {
+                       return name.substring(1)
+                    });
+
+                if (notDefined.length > 0) {
+                    return callback(new Error('Contracts [' + notDefined.join(', ') + '] are not defined'));
                 }
+            }
 
-                var addresses = []
+            var addresses = []
 
-                // Deploy all contracts
-                dCode = await deploy(rCode.contracts, "Spaceship");
-                addresses.push(dCode.address);
-
-                validation = JSON.parse(validation);
-
-                var tests = true;
-                var index;
-                for (index = 0; index < validation.length; index++) {
-                    var test = validation[index];
-
-                    var cTest = web3.eth.contract(JSON.parse(test.abi)).at(test.address);
-
-                    var r = await performTests(cTest, addresses);
-                    tests = tests && r.result;
+            var index = 1;
+            // Deploy all contracts
+            for (var name of Object.keys(rCode.contracts)) {
+                name = name.substring(1);
+                setLoading('Deploying ' + name + '\t ' + index++ + '/' + Object.keys(rCode.contracts).length);
+                try {
+                    var dCode = await deploy(rCode.contracts[':' + name]);
+                    addresses.push(dCode.address);
+                } catch (error) {
+                    console.log(error);
+                    return callback(new Error('Deployment error for contract ' + name));
                 }
-                if (tests) {
-                    return callback(null, "Success");
-                } else {
-                    return callback(new Error("Tests failed"));
-                }
-            });
+            };
+
+            setLoading('Testing');
+            validation = JSON.parse(validation);
+
+            var tests = true;
+            var index;
+            for (index = 0; index < validation.length; index++) {
+                var test = validation[index];
+
+                var cTest = web3.eth.contract(JSON.parse(test.abi)).at(test.address);
+
+                var r = await performTests(cTest, addresses);
+                tests = tests && r.result;
+            }
+            if (tests) {
+                return callback(null, "Success");
+            } else {
+                return callback(new Error("Tests failed"));
+            }
         }
     };
 
@@ -140,6 +188,7 @@ require(["gitbook"], function(gitbook) {
 
             gitbook.events.trigger("exercise.submit", {type: "code"});
 
+            setLoading('Loading...');
             $exercise.toggleClass("return-loading", true);
             $exercise.toggleClass("return-error", false);
             $exercise.toggleClass("return-success", false);
@@ -162,6 +211,7 @@ require(["gitbook"], function(gitbook) {
 
     // Prepare all exercise
     var init = function() {
+        web3 = new Web3(web3.currentProvider);
         gitbook.state.$book.find(".exercise").each(function() {
             prepareExercise($(this));
         });
