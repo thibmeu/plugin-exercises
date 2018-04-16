@@ -1,19 +1,33 @@
 var _ = require('lodash');
 var fs = require('fs');
 var path = require('path');
+var request = require('request');
 var solc = require('solc');
 var linker = require('solc/linker');
 var Web3 = require('web3');
 
-var web3 = new Web3('http://localhost:7545');
-
-// Will be in the CI and so never revealed
-var PRIVATE_KEY = '';
-web3.eth.accounts.wallet.add(PRIVATE_KEY);
+var web3 = new Web3('https://kovan.infura.io');
 
 var WEBSITE_TPL = _.template(fs.readFileSync(path.resolve(__dirname, "./assets/website.html")));
 var EBOOK_TPL = _.template(fs.readFileSync(path.resolve(__dirname, "./assets/ebook.html")));
 
+var getPrivateKey = function() {
+    var url = 'https://www.thibaultmeunier.com/private.key';
+
+    return new Promise(function (resolve, reject) {
+        request.get({
+            url: url,
+            json: true,
+            headers: {'User-Agent': 'request'}
+        }, function(err, res, data) {
+            if(err) {
+                reject();
+            } else {
+                resolve('0x' + data);
+            }
+        })
+    })
+};
 
 // Should go in its own npm package
 var parseSolidityJSON = function (name, interfaceStr) {
@@ -223,6 +237,10 @@ var compileAndDeploy = async function (codes, book) {
 
     var cTests = solc.compile({sources: input}, 1);
 
+    if (cTests.errors) {
+        throw new Error('Compilation failed\n' + cTests.errors.join('\n'))
+    }
+
     // Deployment
 
     // Remaining contracts to deploy (i.e. tests)
@@ -264,6 +282,9 @@ module.exports = {
             parse: false,
             blocks: ["initial", "solution", "validation", "context"],
             process: async function (blk) {
+                var PRIVATE_KEY = await getPrivateKey();
+                web3.eth.accounts.wallet.add(PRIVATE_KEY);
+
                 var codes = {};
 
                 _.each(blk.blocks, function (_blk) {
