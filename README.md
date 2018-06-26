@@ -4,6 +4,8 @@ Interactive exercises in a gitbook
 With this plugin, a book can contain interactive exercises (currently only in Javascript). An exercise is a code challenge provided to the reader, who is given a code editor to write a solution which is checked against the book author's validation code.
 
 ## How to use it?
+[![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2Fthibmeu%2Fplugin-exercises.svg?type=shield)](https://app.fossa.io/projects/git%2Bgithub.com%2Fthibmeu%2Fplugin-exercises?ref=badge_shield)
+
 
 To use the exercises plugin in your Gitbook project, add the `exercises` plugin to the `book.json` file, then install plugins using `gitbook install`.
 
@@ -64,3 +66,7 @@ assert( x == 10 );
 ```
 
 **The old format (`gitbook < 2.0.0`) is no longer supported.**
+
+
+## License
+[![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2Fthibmeu%2Fplugin-exercises.svg?type=large)](https://app.fossa.io/projects/git%2Bgithub.com%2Fthibmeu%2Fplugin-exercises?ref=badge_large)
