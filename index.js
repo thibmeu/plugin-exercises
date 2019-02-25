@@ -112,6 +112,18 @@ const htmlToJson = (html) => {
     return content[0]
   }
 
+  if (html.nodeName.toLowerCase() === 'pre' && content[0].type === 'code') {
+    return {
+      type: 'codeblock',
+      content: [
+        {
+          type: content[0].class.slice('lang-'.length),
+          content: content[0].content
+        }
+      ]
+    }
+  }
+
   return {
     type: html.nodeName.toLowerCase(),
     content,
