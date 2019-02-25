@@ -1,38 +1,15 @@
-<div class="exercise">
-	<div class="header">Exercise</div>
-	<div class="alert alert-success">
-	    <b>Correct!</b>
-	</div>
-
-	<div class="alert alert-danger error-message">
-	    <b>False!</b>
-	</div>
-
-	<div class="alert alert-loading meter blue">
-	    <span style="width: 100%">
-            <p style="text-align: center;color: white;" id="loading-message">Loading...</p>
-        </span>
-	</div>
-
-	<div class="message">
-	<%= message %>
-	</div>
-	<div class="editor" style="height: <%- codes.solution.split("\n").length*20 + 2%>px"><%- codes.initial %></div>
-
-	<pre class="hidden code-solution"><%- codes.solution %></pre>
-	<pre class="hidden code-validation"><%- codes.validation %></pre>
-	<pre class="hidden code-deployed"><%= codes.deployed %></pre>
-	<pre class="hidden code-exerciseId"><%= codes.exerciseId %></pre>
-
-	<div class="buttons">
-	    <a href="#" class="button no-radius action-submit">Submit</a>
-	    <!-- <a href="#" class="button size-2 action-solution">Solution</a> -->
-	</div>
-</div>
-
-<% if (codes.hints) { %>
-<div class="notification">
-	<h3 style="margin: 0">Hint</h3>
-	<%= codes.hints %>
-</div>
-<% } %>
+<exercise>
+{
+    "type": "exercise",
+    "content": [{
+        "description": <%= typeof message === 'string' ? message : `[${message}]` %>,
+        "initial": <%= JSON.stringify(codes.initial) %>,
+        "solution": <%= JSON.stringify(codes.solution) %>,
+        "validation": {
+            "contracts": <%= JSON.stringify(codes.validation) %>,
+            "deployed": <%= JSON.stringify(codes.deployed) %>
+        },
+        "id": <%= codes.exerciseId %>
+    }]
+}
+</exercise>

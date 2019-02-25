@@ -3,6 +3,8 @@ const fs = require('fs')
 const path = require('path')
 const deploy = require('./src/js/exercise/index')
 const blockchain = require('./src/js/exercise/blockchain')
+const unescape = require('unescape')
+const { JSDOM } = require('jsdom')
 const solc = require('solc')
 
 const WEBSITE_TPL = _.template(fs.readFileSync(path.resolve(__dirname, './assets/website.html')))
@@ -47,7 +49,6 @@ async function processDeployement (blk) {
     codes.exerciseId = -1
     codes.deployed = []
   }
-  codes.deployed = JSON.stringify(codes.deployed)
 
   if (codes.hints === undefined) {
     // TODO: when no hints, what shall we do?
@@ -61,11 +62,61 @@ async function processDeployement (blk) {
 
   let wording = await this.book.renderBlock('markdown', blk.body)
   wording = wording.replace('<p>', '').replace('</p>', '')
+  const { body } = (new JSDOM(`<body>${wording}</body>`)).window.document
+
+  wording = htmlToJson(body).content
+  wording = (typeof wording === 'string') ? JSON.stringify(wording) : wording.map(JSON.stringify)
 
   return tpl({
     message: wording,
     codes: codes
   })
+}
+
+const htmlToJson = (html) => {
+  let attributes = []
+
+  if (html.nodeName.toLowerCase() !== 'body' && html.attributes) {
+    attributes = [...html.attributes].reduce((acc, attribute) => Object.defineProperty(acc, attribute.nodeName, {
+      value: attribute.nodeValue,
+      enumerable: true
+    }), {})
+  }
+
+  if (html.nodeName.toLowerCase() === 'exercise') {
+    return JSON.parse(html.innerHTML)
+  }
+
+  if (html.childElementCount === 0) {
+    return {
+      type: html.nodeName.toLowerCase(),
+      content: html.innerHTML,
+      ...attributes
+    }
+  }
+  let content = []
+  html.childNodes.forEach(element => {
+    if (element.nodeName.toLowerCase() === '#text') {
+      if (element.nodeValue.trim() !== '') {
+        content.push(element.nodeValue)
+      }
+      return
+    }
+    const sub = htmlToJson(element)
+    if ((sub.hasOwnProperty('length') && sub.length !== 0) || !sub.hasOwnProperty('length')) {
+      content.push(sub)
+    }
+  })
+
+  if (html.nodeName.toLowerCase() === 'p' && content[0].type === 'exercise') {
+    return content[0]
+  }
+
+  return {
+    type: html.nodeName.toLowerCase(),
+    content,
+    ...attributes
+  }
 }
 
 module.exports = {
@@ -91,7 +142,26 @@ module.exports = {
     ]
   },
   hooks: {
-    init: deployAssertLibrary
+    init: deployAssertLibrary,
+    page: function (page) {
+      const { body } = (new JSDOM(`<body>${unescape(page.content)}</body>`)).window.document
+      page.content = JSON.stringify(htmlToJson(body).content)
+      return page
+    }
+  },
+  filters: {
+    date: function (str) {
+      return (new Date(str)).toDateString()
+    },
+    json: function (str) {
+      return JSON.stringify(str)
+    },
+    toExcerpt: function (str, content) {
+      return JSON.stringify(content)
+    },
+    toURL: function (path) {
+      return `/${this.output.toURL(path)}`
+    }
   },
   blocks: {
     exercise: {

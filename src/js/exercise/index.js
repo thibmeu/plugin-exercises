@@ -29,7 +29,7 @@ async function deployTests (codes, toDeploy, assertLibraryAddress) {
     const address = await blockchain.deploy(codes.contracts[key])
     tests.push({
       address: address,
-      abi: codes.contracts[key].interface
+      abi: JSON.parse(codes.contracts[key].interface)
     })
   }
 
@@ -54,8 +54,9 @@ async function compileAndDeploy (codes, assertLibrary) {
     codes.exerciseId = storedExercise.id
     return storedExercise.abi
       .map((value, index) => {
+        console.log(value)
         return {
-          abi: value,
+          abi: JSON.parse(value),
           address: storedExercise.addresses[index]
         }
       })
