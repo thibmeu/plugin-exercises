@@ -73,6 +73,27 @@ async function processDeployement (blk) {
   })
 }
 
+const pathToURL = path => path.replace(/README\.md$/i, 'index.html').replace(/md$/, 'html')
+
+async function processMain (blk) {
+  const result = Object.keys(this.book.navigation)
+    .reduce((acc, path) => {
+      const page = this.book.navigation[path]
+      return [{
+        title: page.title,
+        categories: path.includes('/') ? [path.split('/')[0]] : [],
+        updated_on: (new Date(Date.now())).toDateString(),
+        summary: null,
+        difficulty: null,
+        url: pathToURL(path),
+        next: page.next && page.next.path ? [pathToURL(page.next.path)] : null,
+        previous: page.prev && page.prev.path ? [pathToURL(page.prev.path)] : null
+      }, ...acc]
+    }, [])
+
+  return JSON.stringify(result, null, '\t')
+}
+
 const htmlToJson = (html) => {
   let attributes = []
 
@@ -156,8 +177,12 @@ module.exports = {
   hooks: {
     init: deployAssertLibrary,
     page: function (page) {
-      const { body } = (new JSDOM(`<body>${unescape(page.content)}</body>`)).window.document
-      page.content = JSON.stringify(htmlToJson(body).content)
+      if (page.main) {
+        page.content = page.content.replace(/<p>/g, '').replace(/<\/p>/g, '')
+      } else {
+        const {body} = (new JSDOM(`<body>${unescape(page.content)}</body>`)).window.document
+        page.content = JSON.stringify(htmlToJson(body).content, null, '\t')
+      }
       return page
     }
   },
@@ -180,6 +205,10 @@ module.exports = {
       parse: false,
       blocks: ['hints', 'initial', 'solution', 'validation'],
       process: processDeployement
+    },
+    main: {
+      parse: false,
+      process: processMain
     }
   }
 }
