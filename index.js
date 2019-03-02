@@ -73,21 +73,25 @@ async function processDeployement (blk) {
   })
 }
 
-const pathToURL = path => path.replace(/README\.md$/i, 'index.html').replace(/md$/, 'html')
+const pathToURL = path => path.replace(/README\.md$/i, '').replace(/md$/, 'html')
 
 async function processMain (blk) {
   const result = Object.keys(this.book.navigation)
     .reduce((acc, path) => {
       const page = this.book.navigation[path]
+      if (page.title.toLowerCase() === 'main') {
+        return acc
+      }
+      const categories = path.includes('/') ? [path.split('/')[1]] : []
       return [{
         title: page.title,
-        categories: path.includes('/') ? [path.split('/')[0]] : [],
+        categories,
         updated_on: (new Date(Date.now())).toDateString(),
         summary: null,
         difficulty: null,
         url: pathToURL(path),
         next: page.next && page.next.path ? [pathToURL(page.next.path)] : null,
-        previous: page.prev && page.prev.path ? [pathToURL(page.prev.path)] : null
+        previous: page.prev && page.prev.path && categories[0] !== 'Homepage' ? [pathToURL(page.prev.path)] : null
       }, ...acc]
     }, [])
 
@@ -106,12 +110,27 @@ const htmlToJson = (html) => {
 
   if (html.nodeName.toLowerCase() === 'exercise') {
     return JSON.parse(html.innerHTML)
+  } else if (html.nodeName.toLowerCase() === 'code') {
+    const findBlock = /<\/[^<]*>/g
+    let text = html.innerHTML
+    let match = findBlock.exec(text)
+    const matches = []
+    while (match && match.length > 0) {
+      matches.push(match[0])
+      match = findBlock.exec(text)
+    }
+    text = matches.reduce((acc, m) => acc.replace(m, ''), text).replace(/>/g, '&gt;').replace(/</g, '&lt;')
+    return {
+      type: html.nodeName.toLowerCase(),
+      content: [ text ],
+      ...attributes
+    }
   }
 
   if (html.childElementCount === 0) {
     return {
       type: html.nodeName.toLowerCase(),
-      content: html.innerHTML,
+      content: [ html.innerHTML ],
       ...attributes
     }
   }
