@@ -41,6 +41,10 @@ async function processDeployement (blk) {
     codes[_blk.name] = _blk.body.trim()
   })
 
+  if (codes.title === undefined) {
+    codes.title = 'Exercise'
+  }
+
   // To have a quick update on local machine deployment can be disabled
   if (!isWriteMode()) {
     // Compile and deploy test contracts to our blockchain
@@ -222,7 +226,7 @@ module.exports = {
   blocks: {
     exercise: {
       parse: false,
-      blocks: ['hints', 'initial', 'solution', 'validation'],
+      blocks: ['title', 'hints', 'initial', 'solution', 'validation'],
       process: processDeployement
     },
     main: {

@@ -2,6 +2,7 @@
 {
     "type": "exercise",
     "content": [{
+        "title": <%= JSON.stringify(codes.title) %>,
         "description": <%= typeof message === 'string' ? message : `[${message}]` %>,
         "initial": <%= JSON.stringify(codes.initial) %>,
         "solution": <%= JSON.stringify(codes.solution) %>,

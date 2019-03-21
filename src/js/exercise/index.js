@@ -23,7 +23,6 @@ async function deployTests (codes, toDeploy, assertLibraryAddress) {
       linker.linkBytecode(
         codes.contracts[key].bytecode,
         {'Assert.sol:Assert': assertLibraryAddress}
-        //{'Assert.sol:Assert': '0x722B2E46213bBDa00aef72e084cCd2AB7168938C'}
       )
     // Deploy the test
     const address = await blockchain.deploy(codes.contracts[key])
@@ -32,7 +31,6 @@ async function deployTests (codes, toDeploy, assertLibraryAddress) {
       abi: JSON.parse(codes.contracts[key].interface)
     })
   }
-
   return tests
 }
 
@@ -65,7 +63,9 @@ async function compileAndDeploy (codes, assertLibrary) {
   // Compile the solution
   const cSolution = solc.compile({sources: {'solution.sol': codes.solution}}, 1)
 
-  if (cSolution.errors && !cSolution.errors.reduce((acc, e) => { return acc && !e.includes('Error') }, true)) {
+  if (cSolution.errors && !cSolution.errors.reduce((acc, e) => {
+    return acc && !e.includes('Error')
+  }, true)) {
     throw new Error(`Solution did not compile properly \n ${cSolution.errors}`)
   }
 
@@ -111,7 +111,7 @@ async function compileAndDeploy (codes, assertLibrary) {
   // Register the exercise into the database
 
   try {
-    codes.exerciseId = await database.register(codes.solution, tests.map(test => test.address), tests.map(test => test.abi))
+    codes.exerciseId = await database.register(codes.title, codes.solution, tests.map(test => test.address), tests.map(test => test.abi))
   } catch (err) {
     codes.exerciseId = -1
   }

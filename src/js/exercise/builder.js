@@ -176,7 +176,6 @@ function transformSolidityTest (test, contracts) {
     }
   }
 
-  console.log(removeLongSpace(result))
   return removeLongSpace(result)
 }
 
