@@ -22,13 +22,14 @@ function getExercise (solution) {
         console.log('Status:', response.statusCode)
         resolve({})
       } else {
+        console.log(`Exercise ${hash} has id ${data.id}`)
         resolve(data)
       }
     })
   })
 }
 
-function createExercise (hash, addresses, abi) {
+function createExercise (title, hash, addresses, abi) {
   return new Promise((resolve, reject) => {
     request.post({
       url: `${url}/exercises`,
@@ -36,12 +37,15 @@ function createExercise (hash, addresses, abi) {
       form: {
         hash: hash,
         addresses: JSON.stringify(addresses),
-        abi: JSON.stringify(abi)
+        abi: JSON.stringify(abi),
+        title: title,
+        token: process.env.API_TOKEN
       }
     }, function (error, response, data) {
       if (error) {
         reject(error)
       } else if (response.statusCode !== 200) {
+        console.log('createExercise Status', response.statusCode)
         reject(response.statusCode)
       } else {
         resolve(data.id)
@@ -50,7 +54,7 @@ function createExercise (hash, addresses, abi) {
   })
 }
 
-async function register (solution, addresses, abi) {
+async function register (title, solution, addresses, abi) {
   if (url === undefined) {
     return 0
   }
@@ -59,9 +63,9 @@ async function register (solution, addresses, abi) {
 
   // Put the exercise into the database
   try {
-    return createExercise(hash, addresses, abi)
+    return createExercise(title, hash, addresses, abi)
   } catch (error) {
-    console.error(error)
+    console.log(error)
     return 0
   }
 }
