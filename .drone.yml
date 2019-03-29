@@ -1,0 +1,5 @@
+pipeline:
+  trigger:
+    image: plugins/downstream
+    secrets: [ PLUGIN_REPOSITORIES, PLUGIN_TOKEN, DOWNSTREAM_SERVER, PLUGIN_FORK]
+branches: [v2]
