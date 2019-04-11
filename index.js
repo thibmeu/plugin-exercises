@@ -181,7 +181,7 @@ const copyPageFrontmatterToIndex = function () {
     let fileName = page.url
     if (fileName.endsWith('/')) fileName += 'index.html'
     const file = JSON.parse(fs.readFileSync(baseFolder + fileName))
-    indexFile.pages[index].categories = file.categories
+    indexFile.pages[index].categories = file.categories || []
     indexFile.pages[index].difficulty = file.difficulty
   })
   fs.writeFileSync(indexFileName, JSON.stringify(indexFile))
