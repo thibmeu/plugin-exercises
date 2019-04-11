@@ -52,7 +52,6 @@ async function compileAndDeploy (codes, assertLibrary) {
     codes.exerciseId = storedExercise.id
     return storedExercise.abi
       .map((value, index) => {
-        console.log(value)
         return {
           abi: JSON.parse(value),
           address: storedExercise.addresses[index]
