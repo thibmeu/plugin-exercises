@@ -33,8 +33,6 @@ async function deployAssertLibrary () {
  * @returns {string} - HTML code to insert into the webpage
  */
 async function processDeployement (blk) {
-  const log = this.book.log
-
   const codes = {}
 
   _.each(blk.blocks, function (_blk) {
@@ -80,16 +78,16 @@ async function processDeployement (blk) {
 const pathToURL = path => path.replace(/README\.md$/i, '').replace(/md$/, 'html')
 
 async function processMain (blk) {
-  const result = Object.keys(this.book.navigation)
+  const result = Object.keys(this.navigation)
     .reduce((acc, path) => {
-      const page = this.book.navigation[path]
+      const page = this.navigation[path]
       if (page.title.toLowerCase() === 'main') {
         return acc
       }
       const categories = path.includes('/') ? [path.split('/')[1]] : []
       return [{
         title: page.title,
-        categories,
+        categories: [],
         updated_on: (new Date(Date.now())).toDateString(),
         summary: null,
         difficulty: null,
@@ -175,6 +173,21 @@ const htmlToJson = (html) => {
   }
 }
 
+const copyPageFrontmatterToIndex = function () {
+  const baseFolder = './_book/'
+  const indexFileName = baseFolder + 'index.html'
+  const indexFile = JSON.parse(fs.readFileSync(indexFileName))
+  indexFile.pages.forEach((page, index) => {
+    let fileName = page.url
+    if (fileName.endsWith('/')) fileName += 'index.html'
+    const file = JSON.parse(fs.readFileSync(baseFolder + fileName))
+    indexFile.pages[index].categories = file.categories
+    indexFile.pages[index].difficulty = file.difficulty
+  })
+  fs.writeFileSync(indexFileName, JSON.stringify(indexFile))
+  console.log('Written updated index.html to disk')
+}
+
 module.exports = {
   website: {
     assets: './assets',
@@ -205,9 +218,11 @@ module.exports = {
       } else {
         const {body} = (new JSDOM(`<body>${unescape(page.content)}</body>`)).window.document
         page.content = JSON.stringify(htmlToJson(body).content, null, '\t')
+        console.log('Page', page.title, 'completed')
       }
       return page
-    }
+    },
+    finish: copyPageFrontmatterToIndex
   },
   filters: {
     date: function (str) {
