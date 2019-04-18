@@ -1,0 +1,11 @@
+<mcq>
+{
+  "type": "mcq",
+  "content": {
+    "question": <%= typeof message === 'string' ? codes.question : `[${codes.question}]` %>,
+    "answers": <%= JSON.stringify(codes.answersParsed) %>,
+    "hint": <%= JSON.stringify(codes.hint) %>,
+    "multiplechoice": <%= JSON.stringify(codes.isMultipleChoice) %>
+  }
+}
+</mcq>

@@ -9,6 +9,8 @@ const solc = require('solc')
 
 const WEBSITE_TPL = _.template(fs.readFileSync(path.resolve(__dirname, './assets/website.html')))
 const EBOOK_TPL = _.template(fs.readFileSync(path.resolve(__dirname, './assets/ebook.html')))
+const QUIZ_TPL = _.template(fs.readFileSync(path.resolve(__dirname, './assets/quiz.html')))
+const ANSWER_TPL = _.template(fs.readFileSync(path.resolve(__dirname, './assets/quizanswer.html')))
 
 const assertLibrary = fs.readFileSync(path.resolve(__dirname, './src/sol/Assert.sol'), 'utf8')
 
@@ -23,8 +25,73 @@ async function deployAssertLibrary () {
   const input = {
     'Assert.sol': assertLibrary
   }
-  const codes = solc.compile({sources: input}, 1)
+  const codes = solc.compile({ sources: input }, 1)
   this.config.values.variables.assertLibrary = await blockchain.deploy(codes.contracts['Assert.sol:Assert'])
+}
+
+async function processQuiz (blk) {
+  const codes = {}
+  _.each(blk.blocks, function (_blk) {
+    codes[_blk.name] = _blk.body.trim()
+  })
+
+  if (codes.hint === undefined) {
+    codes.hint = ''
+  } else {
+    codes.hint = await this.book.renderBlock('markdown', codes.hint)
+    codes.hint = renderJSON(codes.hint)
+  }
+
+  let isMultipleChoice = true
+  if (codes.answers) {
+    codes.answersParsed = []
+    const answerLines = codes.answers.split('\n')
+    answerLines.forEach(async line => {
+      line = line.trim()
+      if (line !== '' && startsWithCheckOrRadiobox(line)) {
+        const correctAnswer = isCorrectAnswer(line)
+        if (isRadioboxAnswer(line)) isMultipleChoice = false
+
+        let answerText = await this.book.renderBlock('markdown', line.substring(3).trim())
+        answerText = renderJSON(answerText)
+        console.log('ansText', answerText)
+        const answerParsed = JSON.parse(ANSWER_TPL({ answer: answerText, isCorrectAnswer: correctAnswer }))
+        codes.answersParsed.push(answerParsed)
+      }
+    })
+  }
+  codes.isMultipleChoice = isMultipleChoice
+  const renderedBody = await this.book.renderBlock('markdown', blk.body)
+  codes.question = renderJSON(renderedBody)
+  codes.question = typeof codes.question === 'string' ? JSON.stringify(codes.question) : codes.question.map(JSON.stringify)
+  const res = QUIZ_TPL({ codes })
+  console.log('quizres', res)
+  return res
+}
+
+function startsWithCheckOrRadiobox (line) {
+  if (line) {
+    const lineLower = line.toLowerCase()
+    if (lineLower.startsWith('[ ]') || lineLower.startsWith('[x]') ||
+      lineLower.startsWith('( )') || lineLower.startsWith('(x)')) {
+      return true
+    }
+  }
+  return false
+}
+
+const isRadioboxAnswer = (line) => {
+  return line.toLowerCase().startsWith('(x)') || line.toLowerCase().startsWith('( )')
+}
+
+const isCorrectAnswer = (line) => {
+  return line.toLowerCase().startsWith('[x]') || line.toLowerCase().startsWith('(x)')
+}
+
+function renderJSON (content) {
+  content = content.replace('<p>', '').replace('</p>', '').replace('\n', '')
+  const { body } = (new JSDOM(`<body>${content}</body>`)).window.document
+  return htmlToJson(body).content
 }
 
 /**
@@ -124,15 +191,19 @@ const htmlToJson = (html) => {
     text = matches.reduce((acc, m) => acc.replace(m, ''), text).replace(/>/g, '&gt;').replace(/</g, '&lt;')
     return {
       type: html.nodeName.toLowerCase(),
-      content: [ text ],
+      content: [text],
       ...attributes
     }
+  } else if (html.nodeName.toLowerCase() === 'mcq') {
+    return JSON.parse(html.innerHTML)
+  } else if (html.nodeName.toLowerCase() === 'answer') {
+    return JSON.parse(html.innerHTML)
   }
 
   if (html.childElementCount === 0) {
     return {
       type: html.nodeName.toLowerCase(),
-      content: [ html.innerHTML ],
+      content: [html.innerHTML],
       ...attributes
     }
   }
@@ -151,6 +222,13 @@ const htmlToJson = (html) => {
   })
 
   if (html.nodeName.toLowerCase() === 'p' && content[0].type === 'exercise') {
+    return content[0]
+  }
+
+  if (html.nodeName.toLowerCase() === 'p' && content[0].type === 'mcq') {
+    return content[0]
+  }
+  if (html.nodeName.toLowerCase() === 'p' && content[0].type === 'answer') {
     return content[0]
   }
 
@@ -216,8 +294,9 @@ module.exports = {
       if (page.main) {
         page.content = page.content.replace(/<p>/g, '').replace(/<\/p>/g, '')
       } else {
-        const {body} = (new JSDOM(`<body>${unescape(page.content)}</body>`)).window.document
-        page.content = JSON.stringify(htmlToJson(body).content, null, '\t')
+        const { body } = (new JSDOM(`<body>${unescape(page.content)}</body>`)).window.document
+        const jsonContent = htmlToJson(body).content
+        page.content = JSON.stringify(jsonContent, null, '\t')
         console.log('Page', page.title, 'completed')
       }
       return page
@@ -243,6 +322,11 @@ module.exports = {
       parse: false,
       blocks: ['title', 'hints', 'initial', 'solution', 'validation'],
       process: processDeployement
+    },
+    mcq: {
+      parse: false,
+      blocks: ['hint', 'answers'],
+      process: processQuiz
     },
     main: {
       parse: false,

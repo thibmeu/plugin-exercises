@@ -19,7 +19,7 @@ function getExercise (solution) {
         console.log('Error:', error)
         resolve({})
       } else if (response.statusCode !== 200) {
-        if (response.statusCode === 404) console.log('Status: 404. Exercise does not yet exist.')
+        if (response.statusCode === 404) console.log(`Status: 404. Exercise ${hash} does not yet exist.[[${solution}]]`)
         else console.log('Status:', response.statusCode)
         resolve({})
       } else {
