@@ -35,11 +35,11 @@ async function processQuiz (blk) {
     codes[_blk.name] = _blk.body.trim()
   })
 
-  if (codes.hint === undefined) {
-    codes.hint = ''
+  if (codes.hints === undefined) {
+    codes.hints = ''
   } else {
-    codes.hint = await this.book.renderBlock('markdown', codes.hint)
-    codes.hint = renderJSON(codes.hint)
+    codes.hints = await this.book.renderBlock('markdown', codes.hints)
+    codes.hints = renderJSON(codes.hints)
   }
 
   let isMultipleChoice = true
@@ -278,8 +278,7 @@ module.exports = {
       'dist/0.bundle.js'
     ],
     css: [
-      'exercises.css',
-      'hint.css'
+      'exercises.css'
     ]
   },
   ebook: {
@@ -325,7 +324,7 @@ module.exports = {
     },
     mcq: {
       parse: false,
-      blocks: ['hint', 'answers'],
+      blocks: ['hints', 'answers'],
       process: processQuiz
     },
     main: {
