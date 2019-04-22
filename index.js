@@ -9,8 +9,9 @@ const solc = require('solc')
 
 const WEBSITE_TPL = _.template(fs.readFileSync(path.resolve(__dirname, './assets/website.html')))
 const EBOOK_TPL = _.template(fs.readFileSync(path.resolve(__dirname, './assets/ebook.html')))
+const QUESTION_TPL = _.template(fs.readFileSync(path.resolve(__dirname, './assets/mcq.html')))
+const ANSWER_TPL = _.template(fs.readFileSync(path.resolve(__dirname, './assets/mcq-answer.html')))
 const QUIZ_TPL = _.template(fs.readFileSync(path.resolve(__dirname, './assets/quiz.html')))
-const ANSWER_TPL = _.template(fs.readFileSync(path.resolve(__dirname, './assets/quizanswer.html')))
 
 const assertLibrary = fs.readFileSync(path.resolve(__dirname, './src/sol/Assert.sol'), 'utf8')
 
@@ -30,15 +31,41 @@ async function deployAssertLibrary () {
 }
 
 async function processQuiz (blk) {
+  const codes = { questions: [] }
+  let currentQuestion = {}
+  const that = this
+  if (blk.blocks) {
+    for (const _blk of blk.blocks) {
+      if (_blk.name === 'mcq') {
+        currentQuestion = { 'body': _blk.body, 'blocks': [] }
+      } else if (_blk.name === 'answers') {
+        currentQuestion['blocks'].push({ name: 'answers', body: _blk.body })
+      } else if (_blk.name === 'hints') {
+        currentQuestion['blocks'].push({ name: 'hints', body: _blk.body })
+      } else if (_blk.name === 'endmcq') {
+        const processedQuestion = await processQuestion(currentQuestion, that)
+        const { body: questionBody } = (new JSDOM(`<body>${unescape(processedQuestion)}</body>`)).window.document
+        codes.questions.push(htmlToJson(questionBody).content[0])
+      } else {
+        console.log('unexpected block', _blk.name)
+      }
+    }
+  }
+  return QUIZ_TPL({ codes })
+}
+
+async function processQuestion (blk, that = null) {
   const codes = {}
   _.each(blk.blocks, function (_blk) {
     codes[_blk.name] = _blk.body.trim()
   })
 
+  let bookElement = that ? that.book : this.book
+
   if (codes.hints === undefined) {
     codes.hints = ''
   } else {
-    codes.hints = await this.book.renderBlock('markdown', codes.hints)
+    codes.hints = await bookElement.renderBlock('markdown', codes.hints)
     codes.hints = renderJSON(codes.hints)
   }
 
@@ -52,21 +79,18 @@ async function processQuiz (blk) {
         const correctAnswer = isCorrectAnswer(line)
         if (isRadioboxAnswer(line)) isMultipleChoice = false
 
-        let answerText = await this.book.renderBlock('markdown', line.substring(3).trim())
+        let answerText = await bookElement.renderBlock('markdown', line.substring(3).trim())
         answerText = renderJSON(answerText)
-        console.log('ansText', answerText)
         const answerParsed = JSON.parse(ANSWER_TPL({ answer: answerText, isCorrectAnswer: correctAnswer }))
         codes.answersParsed.push(answerParsed)
       }
     })
   }
   codes.isMultipleChoice = isMultipleChoice
-  const renderedBody = await this.book.renderBlock('markdown', blk.body)
+  const renderedBody = await bookElement.renderBlock('markdown', blk.body)
   codes.question = renderJSON(renderedBody)
   codes.question = typeof codes.question === 'string' ? JSON.stringify(codes.question) : codes.question.map(JSON.stringify)
-  const res = QUIZ_TPL({ codes })
-  console.log('quizres', res)
-  return res
+  return QUESTION_TPL({ codes })
 }
 
 function startsWithCheckOrRadiobox (line) {
@@ -198,6 +222,8 @@ const htmlToJson = (html) => {
     return JSON.parse(html.innerHTML)
   } else if (html.nodeName.toLowerCase() === 'answer') {
     return JSON.parse(html.innerHTML)
+  } else if (html.nodeName.toLowerCase() === 'quiz') {
+    return JSON.parse(html.innerHTML)
   }
 
   if (html.childElementCount === 0) {
@@ -224,8 +250,10 @@ const htmlToJson = (html) => {
   if (html.nodeName.toLowerCase() === 'p' && content[0].type === 'exercise') {
     return content[0]
   }
-
   if (html.nodeName.toLowerCase() === 'p' && content[0].type === 'mcq') {
+    return content[0]
+  }
+  if (html.nodeName.toLowerCase() === 'p' && content[0].type === 'quiz') {
     return content[0]
   }
   if (html.nodeName.toLowerCase() === 'p' && content[0].type === 'answer') {
@@ -294,8 +322,7 @@ module.exports = {
         page.content = page.content.replace(/<p>/g, '').replace(/<\/p>/g, '')
       } else {
         const { body } = (new JSDOM(`<body>${unescape(page.content)}</body>`)).window.document
-        const jsonContent = htmlToJson(body).content
-        page.content = JSON.stringify(jsonContent, null, '\t')
+        page.content = JSON.stringify(htmlToJson(body).content, null, '\t')
         console.log('Page', page.title, 'completed')
       }
       return page
@@ -325,6 +352,11 @@ module.exports = {
     mcq: {
       parse: false,
       blocks: ['hints', 'answers'],
+      process: processQuestion
+    },
+    quiz: {
+      parse: false,
+      blocks: ['mcq', 'hints', 'answers', 'endmcq'],
       process: processQuiz
     },
     main: {

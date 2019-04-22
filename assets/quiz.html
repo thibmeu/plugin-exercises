@@ -1,11 +1,6 @@
-<mcq>
+<quiz>
 {
-  "type": "mcq",
-  "content": {
-    "question": <%= typeof message === 'string' ? codes.question : `[${codes.question}]` %>,
-    "answers": <%= JSON.stringify(codes.answersParsed) %>,
-    "hints": <%= JSON.stringify(codes.hints) %>,
-    "multiplechoice": <%= JSON.stringify(codes.isMultipleChoice) %>
-  }
+  "type": "quiz",
+  "content": <%= JSON.stringify(codes.questions) %>
 }
-</mcq>
+</quiz>
