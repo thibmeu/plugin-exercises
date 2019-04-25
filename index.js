@@ -199,17 +199,20 @@ async function processMain (blk) {
 
 const htmlToJson = (html) => {
   let attributes = []
+  const htmlNodeNameLowerCase = html.nodeName.toLowerCase()
 
-  if (html.nodeName.toLowerCase() !== 'body' && html.attributes) {
+  if (htmlNodeNameLowerCase !== 'body' && html.attributes) {
     attributes = [...html.attributes].reduce((acc, attribute) => Object.defineProperty(acc, attribute.nodeName, {
       value: attribute.nodeValue,
       enumerable: true
     }), {})
   }
 
-  if (html.nodeName.toLowerCase() === 'exercise') {
+  const listParseInnerHtml = ['mcq', 'answer', 'quiz', 'html']
+
+  if (htmlNodeNameLowerCase === 'exercise') {
     return JSON.parse(html.innerHTML)
-  } else if (html.nodeName.toLowerCase() === 'code') {
+  } else if (htmlNodeNameLowerCase === 'code') {
     const findBlock = /<\/[^<]*>/g
     let text = html.innerHTML
     let match = findBlock.exec(text)
@@ -220,21 +223,17 @@ const htmlToJson = (html) => {
     }
     text = matches.reduce((acc, m) => acc.replace(m, ''), text).replace(/>/g, '&gt;').replace(/</g, '&lt;')
     return {
-      type: html.nodeName.toLowerCase(),
+      type: htmlNodeNameLowerCase,
       content: [text],
       ...attributes
     }
-  } else if (html.nodeName.toLowerCase() === 'mcq') {
-    return JSON.parse(html.innerHTML)
-  } else if (html.nodeName.toLowerCase() === 'answer') {
-    return JSON.parse(html.innerHTML)
-  } else if (html.nodeName.toLowerCase() === 'quiz') {
+  } else if (listParseInnerHtml.indexOf(htmlNodeNameLowerCase) >= 0) {
     return JSON.parse(html.innerHTML)
   }
 
   if (html.childElementCount === 0) {
     return {
-      type: html.nodeName.toLowerCase(),
+      type: htmlNodeNameLowerCase,
       content: [html.innerHTML],
       ...attributes
     }
@@ -253,20 +252,12 @@ const htmlToJson = (html) => {
     }
   })
 
-  if (html.nodeName.toLowerCase() === 'p' && content[0].type === 'exercise') {
-    return content[0]
-  }
-  if (html.nodeName.toLowerCase() === 'p' && content[0].type === 'mcq') {
-    return content[0]
-  }
-  if (html.nodeName.toLowerCase() === 'p' && content[0].type === 'quiz') {
-    return content[0]
-  }
-  if (html.nodeName.toLowerCase() === 'p' && content[0].type === 'answer') {
+  const listNestedContentBlocks = ['exercise', 'mcq', 'quiz', 'answer', 'html']
+  if (htmlNodeNameLowerCase === 'p' && listNestedContentBlocks.indexOf(content[0].type) >= 0) {
     return content[0]
   }
 
-  if (html.nodeName.toLowerCase() === 'pre' && content[0].type === 'code') {
+  if (htmlNodeNameLowerCase === 'pre' && content[0].type === 'code') {
     return {
       type: 'codeblock',
       content: [
@@ -279,7 +270,7 @@ const htmlToJson = (html) => {
   }
 
   return {
-    type: html.nodeName.toLowerCase(),
+    type: htmlNodeNameLowerCase,
     content,
     ...attributes
   }
