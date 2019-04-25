@@ -12,6 +12,7 @@ const EBOOK_TPL = _.template(fs.readFileSync(path.resolve(__dirname, './assets/e
 const QUESTION_TPL = _.template(fs.readFileSync(path.resolve(__dirname, './assets/mcq.html')))
 const ANSWER_TPL = _.template(fs.readFileSync(path.resolve(__dirname, './assets/mcq-answer.html')))
 const QUIZ_TPL = _.template(fs.readFileSync(path.resolve(__dirname, './assets/quiz.html')))
+const HTML_TPL = _.template(fs.readFileSync(path.resolve(__dirname, './assets/html.html')))
 
 const assertLibrary = fs.readFileSync(path.resolve(__dirname, './src/sol/Assert.sol'), 'utf8')
 
@@ -28,6 +29,11 @@ async function deployAssertLibrary () {
   }
   const codes = solc.compile({ sources: input }, 1)
   this.config.values.variables.assertLibrary = await blockchain.deploy(codes.contracts['Assert.sol:Assert'])
+}
+
+async function processHtml (blk) {
+  const content = blk.body
+  return HTML_TPL({ content })
 }
 
 async function processQuiz (blk) {
@@ -358,6 +364,10 @@ module.exports = {
       parse: false,
       blocks: ['mcq', 'hints', 'answers', 'endmcq'],
       process: processQuiz
+    },
+    html: {
+      parse: false,
+      process: processHtml
     },
     main: {
       parse: false,
