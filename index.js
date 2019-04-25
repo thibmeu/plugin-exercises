@@ -208,11 +208,11 @@ const htmlToJson = (html) => {
     }), {})
   }
 
-  const listParseInnerHtml = ['mcq', 'answer', 'quiz', 'html']
+  const listParseInnerHtml = ['mcq', 'answer', 'quiz']
 
   if (htmlNodeNameLowerCase === 'exercise') {
     return JSON.parse(html.innerHTML)
-  } else if (htmlNodeNameLowerCase === 'code') {
+  } else if (htmlNodeNameLowerCase === 'code' || htmlNodeNameLowerCase === 'html') {
     const findBlock = /<\/[^<]*>/g
     let text = html.innerHTML
     let match = findBlock.exec(text)
