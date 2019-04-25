@@ -262,7 +262,7 @@ const htmlToJson = (html) => {
       type: 'codeblock',
       content: [
         {
-          type: content[0].class.slice('lang-'.length),
+          type: content[0].class ? content[0].class.slice('lang-'.length) : 'text',
           content: content[0].content
         }
       ]
