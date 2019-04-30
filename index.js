@@ -32,7 +32,7 @@ async function deployAssertLibrary () {
 }
 
 async function processHtml (blk) {
-  const content = blk.body
+  const content = encodeURIComponent(blk.body.trim())
   return HTML_TPL({ content })
 }
 
@@ -199,20 +199,19 @@ async function processMain (blk) {
 
 const htmlToJson = (html) => {
   let attributes = []
-  const htmlNodeNameLowerCase = html.nodeName.toLowerCase()
 
-  if (htmlNodeNameLowerCase !== 'body' && html.attributes) {
+  if (html.nodeName.toLowerCase() !== 'body' && html.attributes) {
     attributes = [...html.attributes].reduce((acc, attribute) => Object.defineProperty(acc, attribute.nodeName, {
       value: attribute.nodeValue,
       enumerable: true
     }), {})
   }
 
-  const listParseInnerHtml = ['mcq', 'answer', 'quiz']
+  const listParseInnerHtml = ['exercise', 'mcq', 'quiz', 'htmlblock']
 
-  if (htmlNodeNameLowerCase === 'exercise') {
+  if (listParseInnerHtml.includes(html.nodeName.toLowerCase())) {
     return JSON.parse(html.innerHTML)
-  } else if (htmlNodeNameLowerCase === 'code' || htmlNodeNameLowerCase === 'html') {
+  } else if (html.nodeName.toLowerCase() === 'code') {
     const findBlock = /<\/[^<]*>/g
     let text = html.innerHTML
     let match = findBlock.exec(text)
@@ -223,17 +222,15 @@ const htmlToJson = (html) => {
     }
     text = matches.reduce((acc, m) => acc.replace(m, ''), text).replace(/>/g, '&gt;').replace(/</g, '&lt;')
     return {
-      type: htmlNodeNameLowerCase,
+      type: html.nodeName.toLowerCase(),
       content: [text],
       ...attributes
     }
-  } else if (listParseInnerHtml.indexOf(htmlNodeNameLowerCase) >= 0) {
-    return JSON.parse(html.innerHTML)
   }
 
   if (html.childElementCount === 0) {
     return {
-      type: htmlNodeNameLowerCase,
+      type: html.nodeName.toLowerCase(),
       content: [html.innerHTML],
       ...attributes
     }
@@ -252,12 +249,12 @@ const htmlToJson = (html) => {
     }
   })
 
-  const listNestedContentBlocks = ['exercise', 'mcq', 'quiz', 'answer', 'html']
-  if (htmlNodeNameLowerCase === 'p' && listNestedContentBlocks.indexOf(content[0].type) >= 0) {
+  const listNestedContentBlocks = ['exercise', 'mcq', 'quiz', 'html']
+  if (html.nodeName.toLowerCase() === 'p' && listNestedContentBlocks.includes(content[0].type)) {
     return content[0]
   }
 
-  if (htmlNodeNameLowerCase === 'pre' && content[0].type === 'code') {
+  if (html.nodeName.toLowerCase() === 'pre' && content[0].type === 'code') {
     return {
       type: 'codeblock',
       content: [
@@ -270,7 +267,7 @@ const htmlToJson = (html) => {
   }
 
   return {
-    type: htmlNodeNameLowerCase,
+    type: html.nodeName.toLowerCase(),
     content,
     ...attributes
   }
