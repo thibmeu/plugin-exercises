@@ -9,6 +9,10 @@ const solc = require('solc')
 
 const WEBSITE_TPL = _.template(fs.readFileSync(path.resolve(__dirname, './assets/website.html')))
 const EBOOK_TPL = _.template(fs.readFileSync(path.resolve(__dirname, './assets/ebook.html')))
+const QUESTION_TPL = _.template(fs.readFileSync(path.resolve(__dirname, './assets/mcq.html')))
+const ANSWER_TPL = _.template(fs.readFileSync(path.resolve(__dirname, './assets/mcq-answer.html')))
+const QUIZ_TPL = _.template(fs.readFileSync(path.resolve(__dirname, './assets/quiz.html')))
+const HTML_TPL = _.template(fs.readFileSync(path.resolve(__dirname, './assets/html.html')))
 
 const assertLibrary = fs.readFileSync(path.resolve(__dirname, './src/sol/Assert.sol'), 'utf8')
 
@@ -23,8 +27,101 @@ async function deployAssertLibrary () {
   const input = {
     'Assert.sol': assertLibrary
   }
-  const codes = solc.compile({sources: input}, 1)
+  const codes = solc.compile({ sources: input }, 1)
   this.config.values.variables.assertLibrary = await blockchain.deploy(codes.contracts['Assert.sol:Assert'])
+}
+
+async function processHtml (blk) {
+  const content = encodeURIComponent(blk.body.trim())
+  return HTML_TPL({ content })
+}
+
+async function processQuiz (blk) {
+  const codes = { questions: [] }
+  let currentQuestion = {}
+  const that = this
+  if (blk.blocks) {
+    for (const _blk of blk.blocks) {
+      if (_blk.name === 'mcq') {
+        currentQuestion = { 'body': _blk.body, 'blocks': [] }
+      } else if (_blk.name === 'answers') {
+        currentQuestion['blocks'].push({ name: 'answers', body: _blk.body })
+      } else if (_blk.name === 'hints') {
+        currentQuestion['blocks'].push({ name: 'hints', body: _blk.body })
+      } else if (_blk.name === 'endmcq') {
+        const processedQuestion = await processQuestion(currentQuestion, that)
+        const { body: questionBody } = (new JSDOM(`<body>${unescape(processedQuestion)}</body>`)).window.document
+        codes.questions.push(htmlToJson(questionBody).content[0])
+      } else {
+        console.log('unexpected block', _blk.name)
+      }
+    }
+  }
+  return QUIZ_TPL({ codes })
+}
+
+async function processQuestion (blk, that = null) {
+  const codes = {}
+  _.each(blk.blocks, function (_blk) {
+    codes[_blk.name] = _blk.body.trim()
+  })
+
+  let bookElement = that ? that.book : this.book
+
+  if (codes.hints === undefined) {
+    codes.hints = ''
+  } else {
+    codes.hints = await bookElement.renderBlock('markdown', codes.hints)
+    codes.hints = renderJSON(codes.hints)
+  }
+
+  let isMultipleChoice = true
+  if (codes.answers) {
+    codes.answersParsed = []
+    const answerLines = codes.answers.split('\n')
+    answerLines.forEach(async line => {
+      line = line.trim()
+      if (line !== '' && startsWithCheckOrRadiobox(line)) {
+        const correctAnswer = isCorrectAnswer(line)
+        if (isRadioboxAnswer(line)) isMultipleChoice = false
+
+        let answerText = await bookElement.renderBlock('markdown', line.substring(3).trim())
+        answerText = renderJSON(answerText)
+        const answerParsed = JSON.parse(ANSWER_TPL({ answer: answerText, isCorrectAnswer: correctAnswer }))
+        codes.answersParsed.push(answerParsed)
+      }
+    })
+  }
+  codes.isMultipleChoice = isMultipleChoice
+  const renderedBody = await bookElement.renderBlock('markdown', blk.body)
+  codes.question = renderJSON(renderedBody)
+  codes.question = typeof codes.question === 'string' ? JSON.stringify(codes.question) : codes.question.map(JSON.stringify)
+  return QUESTION_TPL({ codes })
+}
+
+function startsWithCheckOrRadiobox (line) {
+  if (line) {
+    const lineLower = line.toLowerCase()
+    if (lineLower.startsWith('[ ]') || lineLower.startsWith('[x]') ||
+      lineLower.startsWith('( )') || lineLower.startsWith('(x)')) {
+      return true
+    }
+  }
+  return false
+}
+
+const isRadioboxAnswer = (line) => {
+  return line.toLowerCase().startsWith('(x)') || line.toLowerCase().startsWith('( )')
+}
+
+const isCorrectAnswer = (line) => {
+  return line.toLowerCase().startsWith('[x]') || line.toLowerCase().startsWith('(x)')
+}
+
+function renderJSON (content) {
+  content = content.replace('<p>', '').replace('</p>', '').replace('\n', '')
+  const { body } = (new JSDOM(`<body>${content}</body>`)).window.document
+  return htmlToJson(body).content
 }
 
 /**
@@ -110,7 +207,9 @@ const htmlToJson = (html) => {
     }), {})
   }
 
-  if (html.nodeName.toLowerCase() === 'exercise') {
+  const listParseInnerHtml = ['exercise', 'mcq', 'quiz', 'htmlblock']
+
+  if (listParseInnerHtml.includes(html.nodeName.toLowerCase())) {
     return JSON.parse(html.innerHTML)
   } else if (html.nodeName.toLowerCase() === 'code') {
     const findBlock = /<\/[^<]*>/g
@@ -124,7 +223,7 @@ const htmlToJson = (html) => {
     text = matches.reduce((acc, m) => acc.replace(m, ''), text).replace(/>/g, '&gt;').replace(/</g, '&lt;')
     return {
       type: html.nodeName.toLowerCase(),
-      content: [ text ],
+      content: [text],
       ...attributes
     }
   }
@@ -132,7 +231,7 @@ const htmlToJson = (html) => {
   if (html.childElementCount === 0) {
     return {
       type: html.nodeName.toLowerCase(),
-      content: [ html.innerHTML ],
+      content: [html.innerHTML],
       ...attributes
     }
   }
@@ -150,7 +249,8 @@ const htmlToJson = (html) => {
     }
   })
 
-  if (html.nodeName.toLowerCase() === 'p' && content[0].type === 'exercise') {
+  const listNestedContentBlocks = ['exercise', 'mcq', 'quiz', 'html']
+  if (html.nodeName.toLowerCase() === 'p' && listNestedContentBlocks.includes(content[0].type)) {
     return content[0]
   }
 
@@ -159,7 +259,7 @@ const htmlToJson = (html) => {
       type: 'codeblock',
       content: [
         {
-          type: content[0].class.slice('lang-'.length),
+          type: content[0].class ? content[0].class.slice('lang-'.length) : 'text',
           content: content[0].content
         }
       ]
@@ -200,8 +300,7 @@ module.exports = {
       'dist/0.bundle.js'
     ],
     css: [
-      'exercises.css',
-      'hint.css'
+      'exercises.css'
     ]
   },
   ebook: {
@@ -216,7 +315,7 @@ module.exports = {
       if (page.main) {
         page.content = page.content.replace(/<p>/g, '').replace(/<\/p>/g, '')
       } else {
-        const {body} = (new JSDOM(`<body>${unescape(page.content)}</body>`)).window.document
+        const { body } = (new JSDOM(`<body>${unescape(page.content)}</body>`)).window.document
         page.content = JSON.stringify(htmlToJson(body).content, null, '\t')
         console.log('Page', page.title, 'completed')
       }
@@ -243,6 +342,20 @@ module.exports = {
       parse: false,
       blocks: ['title', 'hints', 'initial', 'solution', 'validation'],
       process: processDeployement
+    },
+    mcq: {
+      parse: false,
+      blocks: ['hints', 'answers'],
+      process: processQuestion
+    },
+    quiz: {
+      parse: false,
+      blocks: ['mcq', 'hints', 'answers', 'endmcq'],
+      process: processQuiz
+    },
+    html: {
+      parse: false,
+      process: processHtml
     },
     main: {
       parse: false,
