@@ -130,9 +130,20 @@ function renderJSON (content) {
  * @returns {string} - HTML code to insert into the webpage
  */
 async function processDeployement (blk) {
-  console.log('exercise deploy', page)
-  console.log('e1', this.page)
-  console.log('e2', page.url)
+  if (this.page) {
+    console.log('e1', this.page)
+  } else {
+    console.log('this.page is null')
+  }
+
+  if (this.ctx) {
+    console.log('ctx', this.ctx)
+  }
+
+  if (this.book) {
+    console.log('book', this.book)
+  }
+
   const codes = {}
 
   _.each(blk.blocks, function (_blk) {
