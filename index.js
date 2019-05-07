@@ -130,19 +130,9 @@ function renderJSON (content) {
  * @returns {string} - HTML code to insert into the webpage
  */
 async function processDeployement (blk) {
-  if (this.page) {
-    console.log('e1', this.page)
-  } else {
-    console.log('this.page is null')
-  }
-
-  if (this.ctx) {
-    console.log('ctx', this.ctx)
-  }
-
-  if (this.book) {
-    console.log('book', this.book)
-  }
+  const pageUrl = this.ctx.ctx.file.path
+  console.log(pageUrl)
+  console.log(pathToURL(pageUrl))
 
   const codes = {}
 
