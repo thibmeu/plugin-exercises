@@ -284,7 +284,9 @@ const copyPageFrontmatterToIndex = function () {
     if (fileName.endsWith('/')) fileName += 'index.html'
     const file = JSON.parse(fs.readFileSync(baseFolder + fileName))
     indexFile.pages[index].categories = file.categories || []
-    indexFile.pages[index].difficulty = file.difficulty
+    indexFile.pages[index].difficulty = file.difficulty || null
+    indexFile.pages[index].author = file.author || null
+    indexFile.pages[index].time = file.time || null
   })
   fs.writeFileSync(indexFileName, JSON.stringify(indexFile))
   console.log('Written updated index.html to disk')
