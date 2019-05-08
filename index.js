@@ -187,7 +187,7 @@ async function processMain (blk) {
       return [{
         title: page.title,
         categories: [],
-        updated_on: (new Date(Date.now())).toDateString(),
+        updated_on: (new Date(Date.now())).toDateString().substr(4),
         summary: null,
         difficulty: null,
         url: pathToURL(path),
