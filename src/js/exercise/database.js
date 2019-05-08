@@ -19,8 +19,11 @@ function getExercise (solution) {
         console.log('Error:', error)
         resolve({})
       } else if (response.statusCode !== 200) {
-        if (response.statusCode === 404) console.log(`Status: 404. Exercise ${hash} does not yet exist.[[${solution}]]`)
-        else console.log('Status:', response.statusCode)
+        if (response.statusCode === 404) {
+          console.log(`Status: 404. Exercise ${hash} does not yet exist.[[${solution}]]`)
+        } else {
+          console.log('Status:', response.statusCode)
+        }
         resolve({})
       } else {
         console.log(`Exercise ${hash} has id ${data.id}`)
@@ -30,16 +33,17 @@ function getExercise (solution) {
   })
 }
 
-function createExercise (title, hash, addresses, abi) {
+function createExercise (exercise) {
   return new Promise((resolve, reject) => {
     request.post({
       url: `${url}/exercises`,
       json: true,
       form: {
-        hash: hash,
-        addresses: JSON.stringify(addresses),
-        abi: JSON.stringify(abi),
-        title: title,
+        hash: exercise.hash,
+        addresses: JSON.stringify(exercise.addresses),
+        abi: JSON.stringify(exercise.abi),
+        title: exercise.title,
+        pageUrl: exercise.pageUrl,
         token: process.env.API_TOKEN
       }
     }, function (error, response, data) {
@@ -55,16 +59,12 @@ function createExercise (title, hash, addresses, abi) {
   })
 }
 
-async function register (title, solution, addresses, abi) {
-  if (url === undefined) {
-    return 0
-  }
-  // Hash of the solution serves as a unique identifier of the exercise
-  const hash = crypto.createHash('sha256').update(solution).digest('hex')
+async function registerExercise (exercise) {
+  if (url === undefined) return 0
 
   // Put the exercise into the database
   try {
-    return createExercise(title, hash, addresses, abi)
+    return createExercise(exercise)
   } catch (error) {
     console.log(error)
     return 0
@@ -73,5 +73,5 @@ async function register (title, solution, addresses, abi) {
 
 module.exports = {
   getExercise: getExercise,
-  register: register
+  registerExercise: registerExercise
 }

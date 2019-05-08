@@ -1,7 +1,7 @@
 const _ = require('lodash')
 const fs = require('fs')
 const path = require('path')
-const deploy = require('./src/js/exercise/index')
+const deployExercises = require('./src/js/exercise/index')
 const blockchain = require('./src/js/exercise/blockchain')
 const unescape = require('unescape')
 const { JSDOM } = require('jsdom')
@@ -130,10 +130,6 @@ function renderJSON (content) {
  * @returns {string} - HTML code to insert into the webpage
  */
 async function processDeployement (blk) {
-  const pageUrl = this.ctx.ctx.file.path
-  console.log(pageUrl)
-  console.log(pathToURL(pageUrl))
-
   const codes = {}
 
   _.each(blk.blocks, function (_blk) {
@@ -144,10 +140,12 @@ async function processDeployement (blk) {
     codes.title = 'Exercise'
   }
 
+  codes.pageUrl = pathToURL(this.ctx.ctx.file.path)
+
   // To have a quick update on local machine deployment can be disabled
   if (!isWriteMode()) {
     // Compile and deploy test contracts to our blockchain
-    codes.deployed = await deploy(codes, { address: this.config.values.variables.assertLibrary, source: assertLibrary })
+    codes.deployed = await deployExercises(codes, { address: this.config.values.variables.assertLibrary, source: assertLibrary })
   } else {
     codes.exerciseId = -1
     codes.deployed = []
