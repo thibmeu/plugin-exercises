@@ -2,10 +2,12 @@ const _ = require('lodash')
 const fs = require('fs')
 const path = require('path')
 const deployExercises = require('./src/js/exercise/index')
+const saveQuiz = require('./src/js/quiz/index')
 const blockchain = require('./src/js/exercise/blockchain')
 const unescape = require('unescape')
 const { JSDOM } = require('jsdom')
 const solc = require('solc')
+const crypto = require('crypto')
 
 const WEBSITE_TPL = _.template(fs.readFileSync(path.resolve(__dirname, './assets/website.html')))
 const EBOOK_TPL = _.template(fs.readFileSync(path.resolve(__dirname, './assets/ebook.html')))
@@ -28,6 +30,7 @@ async function deployAssertLibrary () {
     'Assert.sol': assertLibrary
   }
   const codes = solc.compile({ sources: input }, 1)
+  console.log('DEBUG API URL is ', process.env.API_URL)
   this.config.values.variables.assertLibrary = await blockchain.deploy(codes.contracts['Assert.sol:Assert'])
 }
 
@@ -40,6 +43,7 @@ async function processQuiz (blk) {
   const codes = { questions: [] }
   let currentQuestion = {}
   const that = this
+  const questionHashes = []
   if (blk.blocks) {
     for (const _blk of blk.blocks) {
       if (_blk.name === 'mcq') {
@@ -50,6 +54,10 @@ async function processQuiz (blk) {
         currentQuestion['blocks'].push({ name: 'hints', body: _blk.body })
       } else if (_blk.name === 'endmcq') {
         const processedQuestion = await processQuestion(currentQuestion, that)
+        const answersBlock = currentQuestion.blocks.find(itm => itm.name === 'answers') || { body: 'no answers available' }
+        const questionHashInput = currentQuestion.body + answersBlock.body
+        console.log('quizHashInput', questionHashInput, 'quizHashInputEnd')
+        questionHashes.push(crypto.createHash('sha256').update(questionHashInput).digest('hex'))
         const { body: questionBody } = (new JSDOM(`<body>${unescape(processedQuestion)}</body>`)).window.document
         codes.questions.push(htmlToJson(questionBody).content[0])
       } else {
@@ -57,6 +65,13 @@ async function processQuiz (blk) {
       }
     }
   }
+
+  const pageUrl = pathToURL(this.ctx.ctx.file.path)
+  const quiz = {
+    hash: crypto.createHash('sha256').update(questionHashes.toString()).digest('hex'),
+    pageUrl: pageUrl
+  }
+  codes.quizId = await saveQuiz(quiz)
   return QUIZ_TPL({ codes })
 }
 
@@ -145,7 +160,10 @@ async function processDeployement (blk) {
   // To have a quick update on local machine deployment can be disabled
   if (!isWriteMode()) {
     // Compile and deploy test contracts to our blockchain
-    codes.deployed = await deployExercises(codes, { address: this.config.values.variables.assertLibrary, source: assertLibrary })
+    codes.deployed = await deployExercises(codes, {
+      address: this.config.values.variables.assertLibrary,
+      source: assertLibrary
+    })
   } else {
     codes.exerciseId = -1
     codes.deployed = []

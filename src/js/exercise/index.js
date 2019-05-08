@@ -4,6 +4,7 @@ const linker = require('solc/linker')
 const builder = require('./builder')
 const blockchain = require('./blockchain')
 const database = require('./database')
+const crypto = require('crypto')
 
 /**
  * First deploy the Assert library to the blockchain, then deploy all tests to the blockchain
