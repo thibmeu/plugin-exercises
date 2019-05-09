@@ -1,6 +1,4 @@
 const request = require('request')
-const crypto = require('crypto')
-
 const url = process.env.API_URL
 
 async function createQuiz (quiz) {
@@ -22,6 +20,7 @@ async function createQuiz (quiz) {
           console.log('createQuiz Status', response.statusCode)
           reject(response.statusCode)
         } else {
+          console.log(`Quiz ${quiz.hash} saved with id ${data.id}`)
           resolve(data.id)
         }
       })
@@ -35,7 +34,7 @@ async function createQuiz (quiz) {
 function getQuiz (hash) {
   if (url === undefined) return {}
 
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     request.get({
       url: `${url}/quizzes/${hash}`,
       json: true
@@ -58,7 +57,7 @@ function getQuiz (hash) {
   })
 }
 
-async function saveQuiz(quiz) {
+async function saveQuiz (quiz) {
   let storedQuiz = {}
   try {
     storedQuiz = await getQuiz(quiz.hash)

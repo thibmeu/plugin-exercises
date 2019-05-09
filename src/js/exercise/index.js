@@ -4,7 +4,7 @@ const linker = require('solc/linker')
 const builder = require('./builder')
 const blockchain = require('./blockchain')
 const database = require('./database')
-const crypto = require('crypto')
+const sha256 = require('../utils/hash')
 
 /**
  * First deploy the Assert library to the blockchain, then deploy all tests to the blockchain
@@ -114,7 +114,7 @@ async function compileAndDeploy (codes, assertLibrary) {
     solution: codes.solution,
     addresses: tests.map(test => test.address),
     abi: tests.map(test => test.abi),
-    hash: crypto.createHash('sha256').update(codes.solution).digest('hex')
+    hash: sha256(codes.solution)
   }
 
   // Register the exercise into the database

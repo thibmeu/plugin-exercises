@@ -1,16 +1,13 @@
 const request = require('request')
-const crypto = require('crypto')
-
+const sha256 = require('../utils/hash')
 const url = process.env.API_URL
 
-// eslint-disable-next-line no-unused-vars
 function getExercise (solution) {
   if (url === undefined) {
     return {}
   }
-  const hash = crypto.createHash('sha256').update(solution).digest('hex')
-
   return new Promise((resolve, reject) => {
+    const hash = sha256(solution)
     request.get({
       url: `${url}/exercises/${hash}`,
       json: true
@@ -53,6 +50,7 @@ function createExercise (exercise) {
         console.log('createExercise Status', response.statusCode)
         reject(response.statusCode)
       } else {
+        console.log(`Exercise ${exercise.hash} saved with id ${data.id}`)
         resolve(data.id)
       }
     })
@@ -61,8 +59,6 @@ function createExercise (exercise) {
 
 async function registerExercise (exercise) {
   if (url === undefined) return 0
-
-  // Put the exercise into the database
   try {
     return createExercise(exercise)
   } catch (error) {
