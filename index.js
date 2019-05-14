@@ -1,11 +1,14 @@
 const _ = require('lodash')
 const fs = require('fs')
 const path = require('path')
-const deploy = require('./src/js/exercise/index')
-const blockchain = require('./src/js/exercise/blockchain')
 const unescape = require('unescape')
 const { JSDOM } = require('jsdom')
 const solc = require('solc')
+
+const deployExercises = require('./src/js/exercise/index')
+const saveQuiz = require('./src/js/quiz/index')
+const blockchain = require('./src/js/exercise/blockchain')
+const sha256 = require('./src/js/utils/hash')
 
 const WEBSITE_TPL = _.template(fs.readFileSync(path.resolve(__dirname, './assets/website.html')))
 const EBOOK_TPL = _.template(fs.readFileSync(path.resolve(__dirname, './assets/ebook.html')))
@@ -20,7 +23,19 @@ const isWriteMode = () => {
   return process.env.WRITE_MODE && JSON.parse(process.env.WRITE_MODE)
 }
 
+function pageHook (page) {
+  if (page.main) {
+    page.content = page.content.replace(/<p>/g, '').replace(/<\/p>/g, '')
+  } else {
+    const { body } = (new JSDOM(`<body>${unescape(page.content)}</body>`)).window.document
+    page.content = JSON.stringify(htmlToJson(body).content, null, '\t')
+    console.log('Page', page.title, 'completed')
+  }
+  return page
+}
+
 async function deployAssertLibrary () {
+  console.log('API URL is ', process.env.API_URL)
   if (isWriteMode()) {
     return
   }
@@ -40,6 +55,7 @@ async function processQuiz (blk) {
   const codes = { questions: [] }
   let currentQuestion = {}
   const that = this
+  const questionHashes = []
   if (blk.blocks) {
     for (const _blk of blk.blocks) {
       if (_blk.name === 'mcq') {
@@ -50,6 +66,9 @@ async function processQuiz (blk) {
         currentQuestion['blocks'].push({ name: 'hints', body: _blk.body })
       } else if (_blk.name === 'endmcq') {
         const processedQuestion = await processQuestion(currentQuestion, that)
+        const answersBlock = currentQuestion.blocks.find(itm => itm.name === 'answers') || { body: 'no answers' }
+        const questionHashInput = currentQuestion.body + answersBlock.body
+        questionHashes.push(sha256(questionHashInput))
         const { body: questionBody } = (new JSDOM(`<body>${unescape(processedQuestion)}</body>`)).window.document
         codes.questions.push(htmlToJson(questionBody).content[0])
       } else {
@@ -57,6 +76,13 @@ async function processQuiz (blk) {
       }
     }
   }
+
+  const pageUrl = pathToURL(this.ctx.ctx.file.path)
+  const quiz = {
+    hash: sha256(questionHashes.toString()),
+    pageUrl: pageUrl
+  }
+  codes.quizId = await saveQuiz(quiz)
   return QUIZ_TPL({ codes })
 }
 
@@ -129,7 +155,7 @@ function renderJSON (content) {
  * @param {{blocks: Array<{name: string, body: string}>}} blk - Information about the block being parsed
  * @returns {string} - HTML code to insert into the webpage
  */
-async function processDeployement (blk) {
+async function processExercise (blk) {
   const codes = {}
 
   _.each(blk.blocks, function (_blk) {
@@ -140,10 +166,15 @@ async function processDeployement (blk) {
     codes.title = 'Exercise'
   }
 
+  codes.pageUrl = pathToURL(this.ctx.ctx.file.path)
+
   // To have a quick update on local machine deployment can be disabled
   if (!isWriteMode()) {
     // Compile and deploy test contracts to our blockchain
-    codes.deployed = await deploy(codes, { address: this.config.values.variables.assertLibrary, source: assertLibrary })
+    codes.deployed = await deployExercises(codes, {
+      address: this.config.values.variables.assertLibrary,
+      source: assertLibrary
+    })
   } else {
     codes.exerciseId = -1
     codes.deployed = []
@@ -185,9 +216,11 @@ async function processMain (blk) {
       return [{
         title: page.title,
         categories: [],
-        updated_on: (new Date(Date.now())).toDateString(),
+        updated_on: (new Date(Date.now())).toDateString().substr(4),
         summary: null,
         difficulty: null,
+        author: null,
+        time: null,
         url: pathToURL(path),
         next: page.next && page.next.path ? [pathToURL(page.next.path)] : null,
         previous: page.prev && page.prev.path && categories[0] !== 'Homepage' ? [pathToURL(page.prev.path)] : null
@@ -282,7 +315,9 @@ const copyPageFrontmatterToIndex = function () {
     if (fileName.endsWith('/')) fileName += 'index.html'
     const file = JSON.parse(fs.readFileSync(baseFolder + fileName))
     indexFile.pages[index].categories = file.categories || []
-    indexFile.pages[index].difficulty = file.difficulty
+    indexFile.pages[index].difficulty = file.difficulty || null
+    indexFile.pages[index].author = file.author || null
+    indexFile.pages[index].time = file.time || null
   })
   fs.writeFileSync(indexFileName, JSON.stringify(indexFile))
   console.log('Written updated index.html to disk')
@@ -311,27 +346,15 @@ module.exports = {
   },
   hooks: {
     init: deployAssertLibrary,
-    page: function (page) {
-      if (page.main) {
-        page.content = page.content.replace(/<p>/g, '').replace(/<\/p>/g, '')
-      } else {
-        const { body } = (new JSDOM(`<body>${unescape(page.content)}</body>`)).window.document
-        page.content = JSON.stringify(htmlToJson(body).content, null, '\t')
-        console.log('Page', page.title, 'completed')
-      }
-      return page
-    },
+    page: pageHook,
     finish: copyPageFrontmatterToIndex
   },
   filters: {
     date: function (str) {
-      return (new Date(str)).toDateString()
+      return (new Date(str)).toDateString().substr(4)
     },
     json: function (str) {
       return JSON.stringify(str)
-    },
-    toExcerpt: function (str, content) {
-      return JSON.stringify(content)
     },
     toURL: function (path) {
       return `/${this.output.toURL(path)}`
@@ -341,7 +364,7 @@ module.exports = {
     exercise: {
       parse: false,
       blocks: ['title', 'hints', 'initial', 'solution', 'validation'],
-      process: processDeployement
+      process: processExercise
     },
     mcq: {
       parse: false,

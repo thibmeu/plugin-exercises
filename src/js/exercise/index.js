@@ -4,6 +4,7 @@ const linker = require('solc/linker')
 const builder = require('./builder')
 const blockchain = require('./blockchain')
 const database = require('./database')
+const sha256 = require('../utils/hash')
 
 /**
  * First deploy the Assert library to the blockchain, then deploy all tests to the blockchain
@@ -107,10 +108,18 @@ async function compileAndDeploy (codes, assertLibrary) {
 
   // It should be possible to deploy contracts asynchronously
   const tests = await deployTests(cTests, toDeploy, assertLibrary.address)
-  // Register the exercise into the database
+  const exercise = {
+    title: codes.title,
+    pageUrl: codes.pageUrl,
+    solution: codes.solution,
+    addresses: tests.map(test => test.address),
+    abi: tests.map(test => test.abi),
+    hash: sha256(codes.solution)
+  }
 
+  // Register the exercise into the database
   try {
-    codes.exerciseId = await database.register(codes.title, codes.solution, tests.map(test => test.address), tests.map(test => test.abi))
+    codes.exerciseId = await database.registerExercise(exercise)
   } catch (err) {
     codes.exerciseId = -1
   }
